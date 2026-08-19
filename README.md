@@ -24,6 +24,8 @@ a rollback. This widget puts that state in the bar.
   `limine-snapper-sync` has stopped (new snapshots will not reach the boot menu,
   which is where a rollback is chosen), or when `snapper-timeline.timer` has
   stopped taking them in the first place.
+- **What you can do about it** — browse a snapshot to recover a file, create one
+  now, delete one you no longer want, or open Omarchy's restore tool.
 - **Quieter problems** — cleanup timer stopped, a timeline config that has
   recorded nothing for hours, or a filesystem past the usage ceiling at which
   `limine-snapper-sync` stops adding boot entries.
@@ -61,15 +63,29 @@ so the sudo prompt and the result are yours to see.
 > If you have already granted other users, edit `/etc/snapper/configs/<config>`
 > by hand instead.
 
+## Deleting a snapshot
+
+`x` on a selected snapshot deletes it, after a confirmation naming the snapshot
+and its config.
+
+snapper lets the users in a config's `ALLOW_USERS` create *and* delete its
+snapshots, so for those configs this runs in place with no privilege and no
+terminal — the panel reports the result, including snapper's own refusal when
+you aim at the active or default snapshot. For a config you are not on, it falls
+back to a visible terminal running `sudo snapper -c <config> delete <number>`.
+
 ## What it never does
 
-- No privileged command runs in the background. Reading is unprivileged; the
-  three actions that need root are handed to a terminal you can watch.
+- No privileged command runs in the background. Reading is unprivileged, and
+  every action that does need root — creating, restoring, granting access, and
+  deleting on a config you are not allowed on — is handed to a terminal you can
+  watch.
 - Creating and restoring go through Omarchy's own commands
   (`omarchy-snapshot create`, `omarchy-snapshot restore`) rather than
   reimplementing them.
-- Restoring asks first, and its dialog opens with **Cancel** selected — Enter is
-  never the fast path to rewriting what the machine boots into.
+- Restoring and deleting ask first, and every dialog opens with **Cancel**
+  selected — Enter is never the fast path to destroying a snapshot or to
+  rewriting what the machine boots into.
 - `/boot` is mode `700` on Omarchy, so boot entries can never be verified from a
   user session. The panel reports the sync service's state and says nothing
   about entries it cannot see.
@@ -83,10 +99,14 @@ Inside the panel:
 | `j` / `k` or arrows | move the cursor |
 | `enter` | browse the selected snapshot |
 | `y` | copy the selected snapshot's path |
+| `x` | delete the selected snapshot (asks first) |
 | `c` | jump to *Create a snapshot* |
 | `shift+R` | restore (asks first) |
 | `r` | refresh |
 | `esc` | close |
+
+In a confirmation dialog, `left`/`right`/`tab` pick a button, `enter` activates
+it, and `esc` cancels. Every dialog opens with **Cancel** selected.
 
 On the bar icon: left click opens the panel, right click refreshes.
 
@@ -121,13 +141,14 @@ sudo snapper -c root set-config ALLOW_USERS="" SYNC_ACL=no
 
 ## Settings
 
-Both are editable from the widget's settings in the bar, or in
+All three are editable from the widget's settings in the bar, or in
 `~/.config/omarchy/shell.json`:
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `refreshIntervalSec` | `120` | how often to re-read snapshot state |
 | `snapshotsPerConfig` | `5` | snapshots listed per config before "+ N older" |
+| `showCount` | `true` | show the total snapshot count beside the bar icon |
 
 ## Requirements
 
