@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "ianswope.snapshots",
+  "name": "Snapshots",
+  "version": "0.1.0",
+  "author": "Ian Swope",
+  "license": "MIT",
+  "description": "Snapper snapshots in the Omarchy bar: whether this machine can actually be rolled back, and one keystroke to browse a snapshot and recover a file.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Snapshots",
+    "description": "Snapper snapshot health per config, with snapshot browsing, creation, and the limine restore tool.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 120,
+      "snapshotsPerConfig": 5
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 30,
+        "max": 3600,
+        "step": 30,
+        "defaultValue": 120
+      },
+      {
+        "key": "snapshotsPerConfig",
+        "type": "integer",
+        "label": "Snapshots listed per config",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "defaultValue": 5
+      }
+    ]
+  }
+}

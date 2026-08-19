@@ -1,0 +1,171 @@
+#!/bin/bash
+
+# Emit one JSON document describing every snapper config, the units that keep
+# snapshots flowing, and whether a rollback is actually reachable from the boot
+# menu. This is a reporter: it never creates, deletes, or restores anything, and
+# every command it runs is unprivileged. Health policy lives in Model.js so this
+# stays useful on its own for debugging what the widget is showing.
+
+set -o pipefail
+
+fail_json() {
+  jq -n --arg error "$1" '{ok: false, error: $error, configs: [], units: {}, limine: {}}'
+  exit 0
+}
+
+command -v jq >/dev/null 2>&1 || { echo '{"ok":false,"error":"jq is not installed","configs":[],"units":{},"limine":{}}'; exit 0; }
+command -v snapper >/dev/null 2>&1 || fail_json "snapper is not installed"
+
+NOW=$(date +%s)
+
+# Snapshot dates come back as local-time "YYYY-MM-DD HH:MM:SS" with no zone, and
+# QML's Date parser is unreliable on that form. Resolve them to epoch seconds
+# here instead, in a single `date -f -` call per config so a hundred snapshots
+# cost one subprocess rather than one each. Feeding dates through date(1) also
+# gets DST right per snapshot, which a fixed current-offset shortcut would not.
+epochs_for() {
+  local dates="$1"
+  [[ -n $dates ]] || return 0
+  date -f - +%s 2>/dev/null <<<"$dates"
+}
+
+# --------------------------------------------------------------- configs
+
+configs_raw=$(snapper --jsonout list-configs 2>/dev/null)
+if [[ -z $configs_raw ]]; then
+  fail_json "snapper is installed but reported no configs"
+fi
+
+config_objects=()
+while IFS=$'\t' read -r name subvolume; do
+  [[ -n $name ]] || continue
+
+  # Filesystem usage is readable even when the snapshot list is not, so probe it
+  # before the permission split and report it either way.
+  usage=$(df -B1 --output=pcent,size,avail "$subvolume" 2>/dev/null | tail -n1)
+  used_pct=$(awk '{gsub(/%/,"",$1); print $1+0}' <<<"$usage")
+  fs_size=$(awk '{print $2+0}' <<<"$usage")
+  fs_avail=$(awk '{print $3+0}' <<<"$usage")
+
+  err_file=$(mktemp)
+  list_out=$(snapper --jsonout -c "$name" list 2>"$err_file")
+  list_rc=$?
+  list_err=$(tr -d '\r' <"$err_file" | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//')
+  rm -f "$err_file"
+
+  if (( list_rc != 0 )) || [[ -z $list_out ]]; then
+    # Almost always "No permissions." — the config's ALLOW_USERS does not include
+    # this user. Report it as unknown rather than as an empty snapshot list, so
+    # the panel can say so instead of implying nothing has ever been captured.
+    config_objects+=("$(jq -n \
+      --arg name "$name" --arg subvolume "$subvolume" \
+      --arg error "${list_err:-could not read snapshots}" \
+      --argjson usedPct "${used_pct:-0}" --argjson fsSize "${fs_size:-0}" --argjson fsAvail "${fs_avail:-0}" \
+      '{name: $name, subvolume: $subvolume, readable: false, error: $error,
+        snapshots: [], count: 0, config: {},
+        usedPercent: $usedPct, fsSize: $fsSize, fsAvail: $fsAvail}')")
+    continue
+  fi
+
+  # Number 0 is the live subvolume snapper always lists as "current", not a
+  # snapshot. Dropping it keeps counts honest.
+  snaps=$(jq --arg name "$name" '[.[$name][]? | select(.number != 0)]' <<<"$list_out")
+
+  dates=$(jq -r '.[] | .date // ""' <<<"$snaps")
+  epoch_lines=$(epochs_for "$dates")
+  if [[ $(wc -l <<<"$epoch_lines") -eq $(wc -l <<<"$dates") && -n $dates ]]; then
+    epochs=$(jq -R -s 'split("\n") | map(select(length > 0) | tonumber)' <<<"$epoch_lines")
+  else
+    epochs="[]"
+  fi
+
+  cfg=$(snapper --jsonout -c "$name" get-config 2>/dev/null)
+  [[ -n $cfg ]] || cfg="{}"
+
+  config_objects+=("$(jq -n \
+    --arg name "$name" --arg subvolume "$subvolume" \
+    --argjson snaps "$snaps" --argjson epochs "$epochs" \
+    --argjson cfg "$cfg" \
+    --argjson usedPct "${used_pct:-0}" --argjson fsSize "${fs_size:-0}" --argjson fsAvail "${fs_avail:-0}" \
+    '{
+      name: $name,
+      subvolume: $subvolume,
+      readable: true,
+      error: "",
+      count: ($snaps | length),
+      usedPercent: $usedPct,
+      fsSize: $fsSize,
+      fsAvail: $fsAvail,
+      config: {
+        timelineCreate: (($cfg.TIMELINE_CREATE // "no") == "yes"),
+        timelineCleanup: (($cfg.TIMELINE_CLEANUP // "no") == "yes"),
+        numberLimit: (($cfg.NUMBER_LIMIT // "0") | tonumber? // 0),
+        allowUsers: ($cfg.ALLOW_USERS // ""),
+        syncAcl: (($cfg.SYNC_ACL // "no") == "yes"),
+        hourly: (($cfg.TIMELINE_LIMIT_HOURLY // "0") | tonumber? // 0),
+        daily: (($cfg.TIMELINE_LIMIT_DAILY // "0") | tonumber? // 0)
+      },
+      snapshots: [
+        $snaps | to_entries[] | {
+          number: .value.number,
+          type: .value.type,
+          date: (.value.date // ""),
+          epoch: ($epochs[.key] // 0),
+          description: (.value.description // ""),
+          cleanup: (.value.cleanup // ""),
+          usedSpace: .value["used-space"],
+          isDefault: (.value.default // false),
+          isActive: (.value.active // false)
+        }
+      ]
+    }')")
+done < <(jq -r '.configs[]? | "\(.config)\t\(.subvolume)"' <<<"$configs_raw")
+
+configs_json=$(printf '%s\n' "${config_objects[@]}" | jq -s '.')
+
+# ----------------------------------------------------------------- units
+
+unit_json() {
+  local unit="$1" props
+  props=$(systemctl show -p LoadState -p ActiveState -p UnitFileState -p Result \
+    -p NextElapseUSecRealtime -p ExecMainStatus "$unit" 2>/dev/null)
+  local load active enabled result next
+  load=$(sed -n 's/^LoadState=//p' <<<"$props")
+  active=$(sed -n 's/^ActiveState=//p' <<<"$props")
+  enabled=$(sed -n 's/^UnitFileState=//p' <<<"$props")
+  result=$(sed -n 's/^Result=//p' <<<"$props")
+  next=$(sed -n 's/^NextElapseUSecRealtime=//p' <<<"$props")
+  jq -n --arg unit "$unit" --arg load "$load" --arg active "$active" \
+        --arg enabled "$enabled" --arg result "$result" --arg next "${next:-0}" \
+    '{unit: $unit, present: ($load == "loaded"), active: $active,
+      enabled: $enabled, result: $result,
+      nextElapseUsec: ($next | tonumber? // 0)}'
+}
+
+units_json=$(jq -s 'map({key: .unit, value: .}) | from_entries' <<<"$(
+  for u in snapper-timeline.timer snapper-cleanup.timer snapper-boot.timer limine-snapper-sync.service; do
+    unit_json "$u"
+  done
+)")
+
+# ---------------------------------------------------------------- limine
+
+# The boot menu is where a snapper rollback actually gets chosen, so whether
+# limine-snapper-sync is running matters as much as whether snapshots exist.
+# /boot is mode 700 on Omarchy, so the entries themselves can never be verified
+# from a user session — report what is readable and say nothing about the rest.
+limine_conf=/etc/limine-snapper-sync.conf
+limine_json=$(jq -n \
+  --argjson confPresent "$([[ -r $limine_conf ]] && echo true || echo false)" \
+  --argjson bootReadable "$([[ -r /boot ]] && echo true || echo false)" \
+  --arg restoreMethod "$(sed -n 's/^RESTORE_METHOD=//p' "$limine_conf" 2>/dev/null | tail -n1)" \
+  --arg limitUsagePercent "$(sed -n 's/^LIMIT_USAGE_PERCENT=//p' "$limine_conf" 2>/dev/null | tail -n1)" \
+  '{confPresent: $confPresent, bootReadable: $bootReadable,
+    restoreMethod: $restoreMethod,
+    limitUsagePercent: ($limitUsagePercent | tonumber? // 0)}')
+
+jq -n --argjson now "$NOW" --argjson configs "$configs_json" \
+      --argjson units "$units_json" --argjson limine "$limine_json" \
+      --arg user "${USER:-$(id -un)}" \
+  '{ok: true, error: "", now: $now, user: $user,
+    configs: $configs, units: $units, limine: $limine}'
