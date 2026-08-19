@@ -20,6 +20,7 @@ Panel {
   // "" when no dialog is up, otherwise the action awaiting confirmation.
   property string confirmKind: ""
   property string confirmConfig: ""
+  property int confirmNumber: 0
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -28,6 +29,25 @@ Panel {
 
   readonly property var items: snapshots.navItems
   readonly property bool confirming: confirmKind !== ""
+  readonly property bool countVisible: snapshots.showCount && snapshots.barCountText !== ""
+
+  readonly property string confirmMessage: {
+    if (confirmKind === "restore")
+      return "Open the restore tool? It rewrites which snapshot this machine boots into."
+    if (confirmKind === "delete")
+      return "Delete snapshot #" + confirmNumber + " from '" + confirmConfig + "'? This cannot be undone."
+        + (snapshots.canModify(confirmConfig) ? "" : "\n\nThis config needs sudo, so it opens a terminal.")
+    if (confirmKind === "grant")
+      return "Grant your user read access to the '" + confirmConfig + "' config?\n\n"
+        + snapshots.grantCommandFor(confirmConfig) + "\n\nThis replaces that config's ALLOW_USERS."
+    return ""
+  }
+
+  readonly property string confirmAction: {
+    if (confirmKind === "restore") return "Open"
+    if (confirmKind === "delete") return "Delete"
+    return "Run in a terminal"
+  }
 
   // Only a real failure recolours the bar. An ungranted config is the stock
   // state on a fresh install, so it must not paint the icon urgent.
@@ -53,12 +73,6 @@ Panel {
   }
 
   function moveCursor(dx, dy) {
-    // While a dialog is up the same keys pick between its two buttons, so the
-    // list cursor must not move underneath it.
-    if (confirming) {
-      if (dx !== 0) confirmDialog.selectedIndex = confirmDialog.selectedIndex === 0 ? 1 : 0
-      return
-    }
     cursorActive = true
     ensureCursor()
     if (dy === 0) return
@@ -67,11 +81,6 @@ Panel {
   }
 
   function activateCursor() {
-    if (confirming) {
-      if (confirmDialog.selectedIndex === 0) cancelConfirm()
-      else acceptConfirm()
-      return
-    }
     ensureCursor()
     var item = selectedItem()
     if (!item) return
@@ -103,17 +112,28 @@ Panel {
     confirmDialog.selectedIndex = 0
   }
 
+  function askDelete(item) {
+    if (!item || item.kind !== "snapshot") return
+    confirmConfig = item.config
+    confirmNumber = item.number
+    confirmKind = "delete"
+    confirmDialog.selectedIndex = 0
+  }
+
   function cancelConfirm() {
     confirmKind = ""
     confirmConfig = ""
+    confirmNumber = 0
   }
 
   function acceptConfirm() {
     var kind = confirmKind
     var configName = confirmConfig
+    var number = confirmNumber
     cancelConfirm()
     if (kind === "restore") snapshots.restore()
     else if (kind === "grant") snapshots.grantReadAccess(configName)
+    else if (kind === "delete") snapshots.deleteSnapshot(configName, number)
   }
 
   function scrollItemIntoView(item) {
@@ -147,6 +167,8 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
+  onConfirmingChanged: if (!confirming && opened) Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+
   onOpenedChanged: if (opened) {
     cursorActive = false
     cancelConfirm()
@@ -172,16 +194,43 @@ Panel {
     function level(): string { return snapshots.level }
   }
 
+  // Measures the count so the bar slot widens by exactly the text it will draw,
+  // rather than by a guessed constant that breaks at three digits.
+  TextMetrics {
+    id: countMetrics
+    font.family: root.fontFamily
+    font.pixelSize: Style.bar.iconFont
+    text: snapshots.barCountText
+  }
+
   BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
+    slotSize: Style.bar.iconSlot + (root.countVisible ? countMetrics.width + Style.space(3) : 0)
     iconComponent: Component {
+      // The row is centred on the icon canvas and allowed to overflow it, which
+      // keeps icon and count centred as one group in the widened slot.
       Item {
-        SnapshotIcon {
+        Row {
           anchors.centerIn: parent
-          iconSize: Style.space(12)
-          color: root.barIconColor
+          spacing: Style.space(3)
+
+          SnapshotIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            iconSize: Style.space(12)
+            color: root.barIconColor
+          }
+
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.countVisible
+            text: snapshots.barCountText
+            color: root.barIconColor
+            font.family: root.fontFamily
+            font.pixelSize: Style.bar.iconFont
+            renderType: Text.NativeRendering
+          }
         }
       }
     }
@@ -206,22 +255,23 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      // While a dialog is up it owns the keyboard: blocked stops this handler
+      // from accepting events so they reach the focused dialog instead. Without
+      // it the dialog is visible but deaf, and Enter escapes to the surface
+      // underneath.
+      blocked: root.confirming
       onMoveRequested: function(dx, dy) {
-        if (!root.cursorActive && !root.confirming) { root.cursorActive = true; return }
+        if (!root.cursorActive) { root.cursorActive = true; return }
         root.moveCursor(dx, dy)
       }
       onActivateRequested: {
-        if (root.confirming) root.activateCursor()
-        else if (root.cursorActive) root.activateCursor()
+        if (root.cursorActive) root.activateCursor()
         else root.cursorActive = true
       }
-      onCloseRequested: {
-        if (root.confirming) root.cancelConfirm()
-        else root.close()
-      }
-      onTabRequested: function(direction) { if (!root.confirming) root.switchPanel(direction) }
+      onCloseRequested: root.close()
+      onDeleteRequested: root.askDelete(root.selectedItem())
+      onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
-        if (root.confirming) return
         if (t === "r") snapshots.refresh()
         else if (t === "y") { var s = root.selectedItem(); if (s && s.kind === "snapshot") snapshots.copyPath(s) }
         else if (t === "c") root.selectKind("create")
@@ -361,7 +411,7 @@ Panel {
 
         Text {
           width: parent.width
-          text: "enter browse · y copy · c create · shift+R restore"
+          text: "enter browse · y copy · x delete · c create · shift+R restore"
           color: Qt.darker(root.dim, 1.15)
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -374,10 +424,12 @@ Panel {
         anchors.fill: parent
         z: 10
         opened: root.confirming
-        message: root.confirmKind === "restore"
-          ? "Open the restore tool? It rewrites which snapshot this machine boots into."
-          : "Grant your user read access to the '" + root.confirmConfig + "' config?\n\n" + snapshots.grantCommandFor(root.confirmConfig) + "\n\nThis replaces that config's ALLOW_USERS."
-        confirmText: root.confirmKind === "restore" ? "Open" : "Run in a terminal"
+        focus: root.confirming
+        Keys.onPressed: function(event) {
+          if (confirmDialog.handleKey(event)) event.accepted = true
+        }
+        message: root.confirmMessage
+        confirmText: root.confirmAction
         foreground: root.foreground
         fontFamily: root.fontFamily
         onCanceled: root.cancelConfirm()

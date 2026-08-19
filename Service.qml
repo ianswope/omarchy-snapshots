@@ -29,7 +29,12 @@ Item {
 
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 120, 30, 3600)
   readonly property int snapshotsPerConfig: intSetting("snapshotsPerConfig", 5, 1, 50)
+  readonly property bool showCount: setting("showCount", true) === true
   readonly property var navItems: Model.navItems(status, snapshotsPerConfig)
+
+  readonly property string currentUser: status.user || Quickshell.env("USER")
+  // Blank until the first read lands, so the bar does not flash a zero.
+  readonly property string barCountText: everLoaded && status.ok ? String(totalSnapshots) : ""
 
   // A plugin cannot lean on OMARCHY_PATH the way a bundled one does, so resolve
   // the helper next to this QML file instead.
@@ -115,6 +120,25 @@ Item {
     return "sudo snapper -c " + configName + " set-config ALLOW_USERS=" + user + " SYNC_ACL=yes"
   }
 
+  // Deleting needs no privilege for a config this user is allowed to work with,
+  // so the common case runs in place and reports failures in the panel. Anything
+  // else falls back to the same visible terminal as create and restore.
+  function canModify(configName) {
+    return Model.allowsUser(configByName(configName), currentUser)
+  }
+
+  function deleteSnapshot(configName, number) {
+    if (!configName || !(number > 0) || deleteProcess.running) return
+    if (!canModify(configName)) {
+      runInTerminal("sudo snapper -c " + configName + " delete " + number,
+                    "Deleting snapshot " + number + " in a terminal…")
+      return
+    }
+    actionStatus = "Deleting snapshot " + number + "…"
+    deleteProcess.command = ["snapper", "-c", configName, "delete", String(number)]
+    deleteProcess.running = true
+  }
+
   function browse(row) {
     if (!row || !row.path) return
     Quickshell.execDetached(["uwsm-app", "--", "nautilus", row.path])
@@ -160,6 +184,26 @@ Item {
     interval: 3000
     repeat: false
     onTriggered: root.actionStatus = ""
+  }
+
+  Process {
+    id: deleteProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: deleteStdout; waitForEnd: true }
+    stderr: StdioCollector { id: deleteStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        root.actionStatus = "Snapshot deleted"
+      } else {
+        // snapper refuses to delete the active or default snapshot, and says so
+        // clearly enough to show verbatim.
+        var why = String(deleteStderr.text || deleteStdout.text || "").replace(/\s+/g, " ").trim()
+        root.actionStatus = why || "Could not delete that snapshot"
+      }
+      actionStatusTimer.restart()
+      root.refresh()
+    }
   }
 
   Process {

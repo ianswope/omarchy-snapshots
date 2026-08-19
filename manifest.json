@@ -14,13 +14,14 @@
   },
   "barWidget": {
     "displayName": "Snapshots",
-    "description": "Snapper snapshot health per config, with snapshot browsing, creation, and the limine restore tool.",
+    "description": "Snapper snapshot health per config, with snapshot browsing, creation, deletion, and the limine restore tool.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
       "refreshIntervalSec": 120,
-      "snapshotsPerConfig": 5
+      "snapshotsPerConfig": 5,
+      "showCount": true
     },
     "schema": [
       {
@@ -40,6 +41,12 @@
         "max": 50,
         "step": 1,
         "defaultValue": 5
+      },
+      {
+        "key": "showCount",
+        "type": "boolean",
+        "label": "Show the snapshot count in the bar",
+        "defaultValue": true
       }
     ]
   }

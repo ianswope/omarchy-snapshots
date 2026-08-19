@@ -244,6 +244,20 @@ function snapshotPath(config, snapshot) {
   return base + "/.snapshots/" + snapshot.number + "/snapshot"
 }
 
+// snapper lets the users in a config's ALLOW_USERS create and delete its
+// snapshots, not just read them — verified by asking snapper to delete a
+// snapshot number that does not exist: an allowed user is told the snapshot was
+// not found, everyone else is told "No permissions." So the same list that
+// makes a config readable also decides whether deleting needs sudo.
+function allowsUser(config, user) {
+  if (!config || !config.config || !user) return false
+  var allowed = String(config.config.allowUsers || "").split(/[\s,]+/)
+  for (var i = 0; i < allowed.length; i++) {
+    if (allowed[i] === user) return true
+  }
+  return false
+}
+
 function configMeta(config, now) {
   // An unreadable config gets its own explanatory row right below this one, so
   // saying "not readable" here only says it twice.
