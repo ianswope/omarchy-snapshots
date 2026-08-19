@@ -223,6 +223,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             visible: root.countVisible
             text: snapshots.barCountText
@@ -304,6 +305,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           visible: snapshots.actionStatus !== ""
           width: parent.width
           text: snapshots.actionStatus
@@ -341,6 +343,7 @@ Panel {
               }
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width - Style.space(12)
                 text: modelData.text
                 color: root.levelColor(modelData.level)
@@ -410,6 +413,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: "enter browse · y copy · x delete · c create · shift+R restore"
           color: Qt.darker(root.dim, 1.15)
@@ -463,6 +467,7 @@ Panel {
       spacing: Style.space(2)
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         visible: text !== ""
         text: section.config ? Model.configMeta(section.config, snapshots.status.now) : ""
@@ -473,6 +478,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         visible: text !== ""
         text: {
@@ -510,6 +516,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       visible: section.hidden > 0
       text: "+ " + section.hidden + " older"
       color: Qt.darker(root.dim, 1.15)
@@ -556,6 +563,7 @@ Panel {
         spacing: Style.space(10)
 
         Text {
+          textFormat: Text.PlainText
           text: snapRow.entry ? "#" + snapRow.entry.number : ""
           color: root.dim
           font.family: root.fontFamily
@@ -568,6 +576,7 @@ Panel {
           spacing: Style.space(2)
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: snapRow.entry ? Model.clockText(snapRow.entry.epoch) : ""
             color: root.foreground
@@ -577,6 +586,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: snapRow.entry ? Model.snapshotDetail(snapRow.entry) : ""
             color: root.dim
@@ -587,6 +597,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: Style.space(70)
           horizontalAlignment: Text.AlignRight
           text: snapRow.entry ? Model.relativeAge(snapshots.status.now - snapRow.entry.epoch) : ""
@@ -632,6 +643,7 @@ Panel {
         spacing: Style.space(2)
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: "Needs read access"
           color: root.foreground
@@ -640,6 +652,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           // Say why rather than just that it failed: snapper is doing exactly
           // what it was configured to do, and the fix is one config setting.
@@ -692,6 +705,7 @@ Panel {
       spacing: Style.space(2)
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         text: actionRow.label
         color: actionRow.destructive ? root.urgent : root.foreground
@@ -700,6 +714,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         text: actionRow.hint
         color: root.dim

@@ -198,7 +198,7 @@ Item {
       } else {
         // snapper refuses to delete the active or default snapshot, and says so
         // clearly enough to show verbatim.
-        var why = String(deleteStderr.text || deleteStdout.text || "").replace(/\s+/g, " ").trim()
+        var why = Model.sanitize(deleteStderr.text || deleteStdout.text)
         root.actionStatus = why || "Could not delete that snapshot"
       }
       actionStatusTimer.restart()
@@ -222,7 +222,7 @@ Item {
       // The helper reports its own failures as JSON, so an empty stdout means it
       // could not run at all.
       root.everLoaded = true
-      root.lastError = String(statusStderr.text || "").trim() || ("Could not run " + root.helperPath)
+      root.lastError = Model.sanitize(statusStderr.text) || ("Could not run " + root.helperPath)
       root.healthInfo = { level: "critical", headline: root.lastError, issues: [{ level: "critical", text: root.lastError }] }
     }
   }

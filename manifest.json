@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ianswope.snapshots",
   "name": "Snapshots",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Ian Swope",
   "license": "MIT",
   "description": "Snapper snapshots in the Omarchy bar: whether this machine can actually be rolled back, and one keystroke to browse a snapshot and recover a file.",

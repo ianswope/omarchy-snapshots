@@ -19,6 +19,52 @@ function emptyStatus() {
   }
 }
 
+// Everything snapper hands back is untrusted text. A snapshot description is
+// chosen by whoever created the snapshot, and config names, ALLOW_USERS and
+// snapper's own error output all end up on screen too.
+//
+// QML's Text defaults to AutoText, which treats a string that looks like markup
+// as rich text — so a description of `<img src="http://host/x">` would make the
+// shell fetch that URL, and a `file://` source would read local paths. Panel.qml
+// pins every Text it owns to PlainText, but strings also flow into shared
+// components (PanelHero, PanelSectionHeader, ConfirmDialog) whose textFormat
+// this plugin cannot set. So markup is stripped here, at the one boundary all
+// external text crosses, rather than trusted to the far end.
+//
+// The length clamp is part of the same job: a multi-kilobyte description would
+// otherwise stretch the popup off screen.
+var MAX_TEXT = 200
+
+function sanitize(value) {
+  var s = String(value === undefined || value === null ? "" : value)
+  // Angle brackets are what makes Qt's mightBeRichText() bite; dropping them
+  // defuses it whatever the payload.
+  s = s.replace(/[<>]/g, "")
+  // Control characters, including the newlines that would break single-line rows.
+  s = s.replace(/[\x00-\x1f\x7f]/g, " ")
+  s = s.replace(/\s+/g, " ").trim()
+  if (s.length > MAX_TEXT) s = s.substring(0, MAX_TEXT - 1) + "…"
+  return s
+}
+
+function sanitizeConfig(config) {
+  if (!config || typeof config !== "object") return config
+  config.name = sanitize(config.name)
+  config.subvolume = sanitize(config.subvolume)
+  config.error = sanitize(config.error)
+  if (config.config && typeof config.config === "object") {
+    config.config.allowUsers = sanitize(config.config.allowUsers)
+  }
+  var snaps = Array.isArray(config.snapshots) ? config.snapshots : []
+  for (var i = 0; i < snaps.length; i++) {
+    snaps[i].description = sanitize(snaps[i].description)
+    snaps[i].cleanup = sanitize(snaps[i].cleanup)
+    snaps[i].type = sanitize(snaps[i].type)
+    snaps[i].date = sanitize(snaps[i].date)
+  }
+  return config
+}
+
 function parseStatus(raw) {
   var text = String(raw || "").trim()
   if (text === "") return emptyStatus()
@@ -27,10 +73,10 @@ function parseStatus(raw) {
     if (!parsed || typeof parsed !== "object") return emptyStatus()
     var status = emptyStatus()
     status.ok = parsed.ok === true
-    status.error = String(parsed.error || "")
+    status.error = sanitize(parsed.error)
     status.now = Number(parsed.now || 0)
-    status.user = String(parsed.user || "")
-    status.configs = Array.isArray(parsed.configs) ? parsed.configs : []
+    status.user = sanitize(parsed.user)
+    status.configs = (Array.isArray(parsed.configs) ? parsed.configs : []).map(sanitizeConfig)
     status.units = parsed.units && typeof parsed.units === "object" ? parsed.units : {}
     if (parsed.limine && typeof parsed.limine === "object") status.limine = parsed.limine
     return status

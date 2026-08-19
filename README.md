@@ -89,6 +89,11 @@ back to a visible terminal running `sudo snapper -c <config> delete <number>`.
 - `/boot` is mode `700` on Omarchy, so boot entries can never be verified from a
   user session. The panel reports the sync service's state and says nothing
   about entries it cannot see.
+- Nothing snapper reports is treated as trusted text. Snapshot descriptions are
+  chosen by whoever created the snapshot, so every string is stripped of markup
+  and length-clamped as it enters the model, and every `Text` item is pinned to
+  `Text.PlainText`. QML's default `AutoText` would treat a description like
+  `<img src="http://host/x">` as rich text and make the shell fetch it.
 
 ## Keyboard
 
