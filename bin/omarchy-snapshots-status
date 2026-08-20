@@ -128,18 +128,16 @@ configs_json=$(printf '%s\n' "${config_objects[@]}" | jq -s '.')
 unit_json() {
   local unit="$1" props
   props=$(systemctl show -p LoadState -p ActiveState -p UnitFileState -p Result \
-    -p NextElapseUSecRealtime -p ExecMainStatus "$unit" 2>/dev/null)
-  local load active enabled result next
+    -p ExecMainStatus "$unit" 2>/dev/null)
+  local load active enabled result
   load=$(sed -n 's/^LoadState=//p' <<<"$props")
   active=$(sed -n 's/^ActiveState=//p' <<<"$props")
   enabled=$(sed -n 's/^UnitFileState=//p' <<<"$props")
   result=$(sed -n 's/^Result=//p' <<<"$props")
-  next=$(sed -n 's/^NextElapseUSecRealtime=//p' <<<"$props")
   jq -n --arg unit "$unit" --arg load "$load" --arg active "$active" \
-        --arg enabled "$enabled" --arg result "$result" --arg next "${next:-0}" \
+        --arg enabled "$enabled" --arg result "$result" \
     '{unit: $unit, present: ($load == "loaded"), active: $active,
-      enabled: $enabled, result: $result,
-      nextElapseUsec: ($next | tonumber? // 0)}'
+      enabled: $enabled, result: $result}'
 }
 
 units_json=$(jq -s 'map({key: .unit, value: .}) | from_entries' <<<"$(

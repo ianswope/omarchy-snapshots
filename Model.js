@@ -89,7 +89,7 @@ function parseStatus(raw) {
 
 function unit(status, name) {
   var u = status && status.units ? status.units[name] : null
-  return u ? u : { unit: name, present: false, active: "inactive", enabled: "disabled", result: "", nextElapseUsec: 0 }
+  return u ? u : { unit: name, present: false, active: "inactive", enabled: "disabled", result: "" }
 }
 
 function unitRunning(status, name) {
