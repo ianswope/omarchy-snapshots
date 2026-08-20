@@ -94,6 +94,9 @@ back to a visible terminal running `sudo snapper -c <config> delete <number>`.
   and length-clamped as it enters the model, and every `Text` item is pinned to
   `Text.PlainText`. QML's default `AutoText` would treat a description like
   `<img src="http://host/x">` as rich text and make the shell fetch it.
+- A config name is checked before it becomes an argument, and snapper commands
+  terminate their options with `--`. A name beginning with a dash would
+  otherwise be read as an option rather than a config.
 
 ## Keyboard
 

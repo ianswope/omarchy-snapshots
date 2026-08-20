@@ -52,8 +52,12 @@ function sanitize(value) {
 // deliberately leaves shell metacharacters alone. snapper config names are
 // filenames under a root-owned directory, so this is not a likely attack path,
 // but a name is data and the check is one line.
+// A leading dash would be read as an option by snapper, so the first character
+// is restricted separately, matching the same check in bin/. Commands that take
+// this name also terminate their options before any positional argument.
 function isSafeName(value) {
-  return /^[A-Za-z0-9._@:+-]+$/.test(String(value === undefined || value === null ? "" : value))
+  var s = String(value === undefined || value === null ? "" : value)
+  return /^[A-Za-z0-9._@:+][A-Za-z0-9._@:+-]*$/.test(s)
 }
 
 function sanitizeConfig(config) {

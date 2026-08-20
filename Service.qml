@@ -120,7 +120,7 @@ Item {
     // a snapper config name nor a username has any business carrying shell
     // syntax, and an empty result disables the action.
     if (!Model.isSafeName(configName) || !Model.isSafeName(user)) return ""
-    return "sudo snapper -c " + configName + " set-config ALLOW_USERS=" + user + " SYNC_ACL=yes"
+    return "sudo snapper -c " + configName + " set-config -- ALLOW_USERS=" + user + " SYNC_ACL=yes"
   }
 
   // Deleting needs no privilege for a config this user is allowed to work with,
@@ -138,12 +138,12 @@ Item {
         actionStatusTimer.restart()
         return
       }
-      runInTerminal("sudo snapper -c " + configName + " delete " + number,
+      runInTerminal("sudo snapper -c " + configName + " delete -- " + number,
                     "Deleting snapshot " + number + " in a terminal…")
       return
     }
     actionStatus = "Deleting snapshot " + number + "…"
-    deleteProcess.command = ["snapper", "-c", configName, "delete", String(number)]
+    deleteProcess.command = ["snapper", "-c", configName, "delete", "--", String(number)]
     deleteProcess.running = true
   }
 
