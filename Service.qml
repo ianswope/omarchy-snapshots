@@ -109,14 +109,17 @@ Item {
   // ALLOW_USERS and let SYNC_ACL put an ACL on the .snapshots directory. Once
   // it is set, this widget needs no privilege at all to read that config.
   function grantReadAccess(configName) {
-    var user = status.user || Quickshell.env("USER")
-    if (!configName || !user) return
-    runInTerminal("sudo snapper -c " + configName + " set-config ALLOW_USERS=" + user + " SYNC_ACL=yes",
-                  "Granting read access to " + configName + "…")
+    var cmd = grantCommandFor(configName)
+    if (cmd === "") { actionStatus = "Unexpected characters in the config name"; actionStatusTimer.restart(); return }
+    runInTerminal(cmd, "Granting read access to " + configName + "…")
   }
 
   function grantCommandFor(configName) {
     var user = status.user || Quickshell.env("USER")
+    // Both halves land in a shell command, so refuse rather than quote: neither
+    // a snapper config name nor a username has any business carrying shell
+    // syntax, and an empty result disables the action.
+    if (!Model.isSafeName(configName) || !Model.isSafeName(user)) return ""
     return "sudo snapper -c " + configName + " set-config ALLOW_USERS=" + user + " SYNC_ACL=yes"
   }
 
@@ -130,6 +133,11 @@ Item {
   function deleteSnapshot(configName, number) {
     if (!configName || !(number > 0) || deleteProcess.running) return
     if (!canModify(configName)) {
+      if (!Model.isSafeName(configName)) {
+        actionStatus = "Unexpected characters in the config name"
+        actionStatusTimer.restart()
+        return
+      }
       runInTerminal("sudo snapper -c " + configName + " delete " + number,
                     "Deleting snapshot " + number + " in a terminal…")
       return

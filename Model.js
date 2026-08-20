@@ -47,6 +47,15 @@ function sanitize(value) {
   return s
 }
 
+// Names that will be spliced into a shell command string must be checked, not
+// merely sanitized: sanitize() exists to stop markup reaching a renderer and
+// deliberately leaves shell metacharacters alone. snapper config names are
+// filenames under a root-owned directory, so this is not a likely attack path,
+// but a name is data and the check is one line.
+function isSafeName(value) {
+  return /^[A-Za-z0-9._@:+-]+$/.test(String(value === undefined || value === null ? "" : value))
+}
+
 function sanitizeConfig(config) {
   if (!config || typeof config !== "object") return config
   config.name = sanitize(config.name)
