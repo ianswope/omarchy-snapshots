@@ -40,6 +40,13 @@ config_objects=()
 while IFS=$'\t' read -r name subvolume; do
   [[ -n $name ]] || continue
 
+  # These become arguments to snapper and df. A value starting with a dash is
+  # parsed as an option, so a config named "-x" would turn a read into whatever
+  # option that spells. Creating one needs root, but the guard is a line and the
+  # loop runs unattended.
+  [[ $name =~ ^[A-Za-z0-9._@:+][A-Za-z0-9._@:+-]*$ ]] || continue
+  [[ $subvolume == /* ]] || continue
+
   # Filesystem usage is readable even when the snapshot list is not, so probe it
   # before the permission split and report it either way.
   usage=$(df -B1 --output=pcent,size,avail "$subvolume" 2>/dev/null | tail -n1)
